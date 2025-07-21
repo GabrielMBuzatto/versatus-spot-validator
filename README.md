@@ -9,8 +9,9 @@ Um validador TypeScript completo para validação de integridade de payloads JSO
 - 🏷️ **Validação de nomes e títulos**: Verifica correspondência entre `spot_name` e `spot_data.title`
 - 📋 **Validação de campos obrigatórios**: Confirma presença de todos os campos necessários
 - 🎯 **Validação de filtros secundários obrigatórios**: Busca itens que contenham exatamente os 5 filtros específicos
+- 🆕 **Classificação inteligente por spot_name**: Identifica quais spots possuem filtros defaults configurados vs. não configurados
 - 📝 **Log estruturado e legível**: Relatórios detalhados com numeração sequencial e formatação organizada
-- 📊 **Estatísticas detalhadas**: Resumos por arquivo e tipo de erro
+- 📊 **Estatísticas detalhadas**: Resumos por arquivo e tipo de erro com classificação por spot_name
 - ⚙️ **Configuração visual**: Comando para exibir todas as regras de validação
 - 🔍 **Busca específica**: Comando dedicado para encontrar itens com filtros corretos
 
@@ -112,6 +113,26 @@ Busca itens que possuam **exatamente** os 5 filtros específicos em `secondary_f
 - 🔄 **Ordem não importa**: Os filtros podem estar em qualquer ordem
 - ⚠️ **Nenhum filtro extra**: Não pode ter filtros além dos 5 obrigatórios
 - ❌ **Nenhum filtro faltando**: Todos os 5 devem estar presentes
+
+#### 🆕 **Classificação por spot_name:**
+A validação agora classifica os resultados por `spot_name` com lógica inteligente:
+
+**✅ Se o spot_name possui pelo menos 1 item com filtros corretos:**
+```
+📊 spot_name: "line-precip-acumulada-A" - Filtro default configurado
+   💬 Spot possui pelo menos um item com filtros defaults corretos
+```
+
+**❌ Se o spot_name não possui nenhum item com filtros corretos:**
+```
+📊 spot_name: "line-precip-acumulada-B" - Total: 352 itens
+   💬 Não foi encontrado nenhum spot com o filtro default definido
+```
+
+**💡 Benefícios:**
+- **Visão clara** de quais spots estão configurados corretamente
+- **Priorização** de quais spots precisam de atenção
+- **Relatórios mais informativos** para tomada de decisão
 
 ## 📊 Tipos de visualização suportados
 
@@ -258,8 +279,21 @@ npm run search-filters
 
 ### 🖥️ **Console - Erros Detalhados**
 ```
-📄 Arquivo: test.json (3 erros)
-──────────────────────────────────────────────────────────────
+🎯 MISSING_REQUIRED_SECONDARY_FILTERS - Classificação por spot_name:
+────────────────────────────────────────────────────────────────────────────────
+
+📊 spot_name: "line-precip-acumulada-A" - Filtro default configurado
+   💬 Spot possui pelo menos um item com filtros defaults corretos
+
+📊 spot_name: "line-precip-acumulada-B" - Total: 352 itens
+   💬 Não foi encontrado nenhum spot com o filtro default definido
+
+📊 spot_name: "elninolanina-oscilacao-sul" - Total: 63 itens
+   💬 Não foi encontrado nenhum spot com o filtro default definido
+
+📋 OUTROS ERROS:
+
+────────────────────────────────────────────────────────────────────────────────
 
    🔴 ERRO #1
    📍 Item: 0
@@ -295,6 +329,21 @@ npm run search-filters
 ════════════════════════════════════════════════════════════════════════════════════════════════
 📊 Total de erros neste arquivo: 3
 
+🎯 MISSING_REQUIRED_SECONDARY_FILTERS - Classificação por spot_name:
+────────────────────────────────────────────────────────────────────────────────
+📊 spot_name: "line-precip-acumulada-A" - Filtro default configurado
+   💬 Spot possui pelo menos um item com filtros defaults corretos
+
+📊 spot_name: "line-precip-acumulada-B" - Total: 2 itens
+   💬 Não foi encontrado nenhum spot com o filtro default definido
+   📍 Item 1 - 2024-01-15T10:30:00.000Z
+   📝 Detalhes: Filtros secundários obrigatórios não conferem. Esperado 5 filtros, encontrado 2...
+   📍 Item 2 - 2024-01-15T10:30:00.000Z
+   📝 Detalhes: Filtros secundários obrigatórios não conferem. Esperado 5 filtros, encontrado 1...
+
+📋 OUTROS ERROS:
+────────────────────────────────────────────────────────────────────────────────
+
 ────────────────────────────────────────────────────────────────────────────────────────────────
 🔴 ERRO #1
 ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -307,6 +356,26 @@ npm run search-filters
 💬 Mensagem:
    Formato do spot_data inválido para spot_type "line":
    ❌ Campo obrigatório ausente: "color_ids"
+
+════════════════════════════════════════════════════════════════════════════════════════════════
+📊 RESUMO FINAL DA VALIDAÇÃO
+════════════════════════════════════════════════════════════════════════════════════════════════
+📅 Data/Hora: 2024-01-15T10:30:00.000Z
+🔍 Total de erros encontrados: 3
+📁 Arquivos com erros: 1
+
+📋 Detalhes por arquivo:
+   - test.json: 3 erros
+
+📋 Tipos de erros:
+   - MISSING_REQUIRED_SECONDARY_FILTERS: 2 ocorrências
+   - INVALID_SPOT_DATA_FORMAT: 1 ocorrências
+
+🎯 MISSING_REQUIRED_SECONDARY_FILTERS por spot_name:
+   - "line-precip-acumulada-A": Filtro default configurado
+   - "line-precip-acumulada-B": 2 itens sem filtros defaults
+   - "elninolanina-oscilacao-sul": 63 itens sem filtros defaults
+════════════════════════════════════════════════════════════════════════════════════════════════
 ```
 
 ## ⚙️ Configuração
@@ -378,9 +447,30 @@ Execute `npm run config` para ver toda a configuração:
 | `INVALID_SPOT_NAME` | Spot name não corresponde ao title |
 | `INVALID_SPOT_TYPE` | Spot type não está na lista válida |
 | `INVALID_SPOT_DATA_FORMAT` | Estrutura do spot_data inválida conforme schema |
-| `MISSING_REQUIRED_SECONDARY_FILTERS` | 🆕 Filtros secundários obrigatórios ausentes/incorretos |
+| `MISSING_REQUIRED_SECONDARY_FILTERS` | 🆕 Filtros secundários obrigatórios ausentes/incorretos - **Classificados por spot_name** |
 | `INVALID_FIELD` | Campo com formato incorreto |
 | `FILE_ERROR` | Erro ao processar arquivo JSON |
+
+### 🎯 **Detalhamento: MISSING_REQUIRED_SECONDARY_FILTERS**
+
+Este tipo de erro agora possui **classificação inteligente por spot_name**:
+
+**📊 Spot Configurado:**
+- **Status:** `Filtro default configurado`  
+- **Significado:** O spot_name possui pelo menos um item com os 5 filtros obrigatórios corretos
+- **Ação:** ✅ Spot está OK, pode ter alguns itens com erro mas a configuração base existe
+
+**📊 Spot Não Configurado:**  
+- **Status:** `X itens sem filtros defaults`
+- **Significado:** Nenhum item do spot_name possui os filtros obrigatórios corretos
+- **Ação:** ❌ Requer atenção imediata - configurar filtros defaults
+
+**🔍 Filtros Obrigatórios:**
+1. Sub-mercados: SE/CO
+2. Sub-mercados: N  
+3. Sub-mercados: S
+4. Sub-mercados: NE
+5. Modelos: Conjunto ONS
 
 ## 🎯 Casos de uso dos comandos
 
@@ -420,3 +510,20 @@ Execute `npm run config` para ver toda a configuração:
 - 🔍 **Para validação geral**: `npm run dev`
 - 🎯 **Para busca específica de filtros default**: `npm run search-filters`  
 - ⚙️ **Para ver regras**: `npm run config` 
+
+### 🆕 **Melhorias Recentes**
+
+✅ **Classificação Inteligente por spot_name**
+- Identifica automaticamente quais spots estão configurados vs. não configurados
+- Exibe "Filtro default configurado" para spots com pelo menos 1 item correto
+- Mostra contagem detalhada para spots sem configuração
+
+✅ **Logs Aprimorados**  
+- Formatação profissional seguindo padrões visuais
+- Separação clara entre tipos de erros
+- Relatórios mais informativos para tomada de decisão
+
+✅ **Estatísticas Detalhadas**
+- Resumo final consolidado por spot_name
+- Visão clara de prioridades de correção
+- Informações estruturadas para análise 

@@ -932,9 +932,9 @@ class PayloadValidator {
     }
 
     private displayErrors(): void {
-        console.log('\n' + '='.repeat(50));
+        console.log('\n' + '═'.repeat(80));
         console.log('🚨 ERROS ENCONTRADOS');
-        console.log('='.repeat(50));
+        console.log('═'.repeat(80));
 
         const errorsByFile = this.errors.reduce((acc, error) => {
             if (!acc[error.fileName]) {
@@ -944,15 +944,70 @@ class PayloadValidator {
             return acc;
         }, {} as Record<string, ValidationError[]>);
 
-        Object.entries(errorsByFile).forEach(([fileName, fileErrors]) => {
-            console.log(`\n📄 Arquivo: ${path.basename(fileName)}`);
-            console.log('-'.repeat(30));
+        // Separar erros de MISSING_REQUIRED_SECONDARY_FILTERS para tratamento especial
+        const missingFiltersErrors = this.errors.filter(error => error.errorType === 'MISSING_REQUIRED_SECONDARY_FILTERS');
+        const otherErrors = this.errors.filter(error => error.errorType !== 'MISSING_REQUIRED_SECONDARY_FILTERS');
+
+        // Mostrar estatísticas de MISSING_REQUIRED_SECONDARY_FILTERS por spot_name
+        if (missingFiltersErrors.length > 0) {
+            console.log('\n🎯 MISSING_REQUIRED_SECONDARY_FILTERS - Classificação por spot_name:');
+            console.log('─'.repeat(60));
             
-            fileErrors.forEach(error => {
-                console.log(`   🔴 [${error.errorType}] ${error.message}`);
-                console.log(`      ↳ spot_name: ${error.spot_name} | item: ${error.itemIndex >= 0 ? error.itemIndex : 'N/A'}`);
+            const errorsBySpotName = missingFiltersErrors.reduce((acc, error) => {
+                if (!acc[error.spot_name]) {
+                    acc[error.spot_name] = [];
+                }
+                acc[error.spot_name].push(error);
+                return acc;
+            }, {} as Record<string, ValidationError[]>);
+
+            // Verificar quais spot_names têm itens com filtros corretos
+            const spotsWithCorrectFilters = new Set(
+                this.itemsWithRequiredFilters.map(item => item.spot_name)
+            );
+
+            Object.entries(errorsBySpotName).forEach(([spotName, errors]) => {
+                if (spotsWithCorrectFilters.has(spotName)) {
+                    console.log(`📊 spot_name: "${spotName}" - Filtro default configurado`);
+                    console.log(`   💬 Spot possui pelo menos um item com filtros defaults corretos`);
+                } else {
+                    console.log(`📊 spot_name: "${spotName}" - Total: ${errors.length} itens`);
+                    console.log(`   💬 Não foi encontrado nenhum spot com o filtro default definido`);
+                    errors.forEach((error, index) => {
+                        console.log(`   📍 Item ${error.itemIndex} (${path.basename(error.fileName)})`);
+                    });
+                }
+                console.log('');
             });
-        });
+        }
+
+        // Mostrar outros tipos de erros
+        if (otherErrors.length > 0) {
+            console.log('\n📋 OUTROS ERROS:');
+            console.log('─'.repeat(60));
+
+            const otherErrorsByFile = otherErrors.reduce((acc, error) => {
+                if (!acc[error.fileName]) {
+                    acc[error.fileName] = [];
+                }
+                acc[error.fileName].push(error);
+                return acc;
+            }, {} as Record<string, ValidationError[]>);
+
+            Object.entries(otherErrorsByFile).forEach(([fileName, fileErrors]) => {
+                console.log(`\n📄 Arquivo: ${path.basename(fileName)} (${fileErrors.length} erros)`);
+                console.log('─'.repeat(60));
+                
+                fileErrors.forEach((error, index) => {
+                    console.log(`\n   🔴 ERRO #${index + 1}`);
+                    console.log(`   📍 Item: ${error.itemIndex >= 0 ? error.itemIndex : 'N/A'}`);
+                    console.log(`   🏷️  Spot: ${error.spot_name}`);
+                    console.log(`   ⚠️  Tipo: ${error.errorType}`);
+                    console.log(`   💬 Mensagem:`);
+                    console.log(`      ${error.message}`);
+                });
+            });
+        }
     }
 
     private generateLogFile(): void {
@@ -968,49 +1023,132 @@ class PayloadValidator {
             return acc;
         }, {} as Record<string, ValidationError[]>);
 
-        const logContent = this.errors.map(error => {
-            return [
-                `[${error.timestamp.toISOString()}]`,
-                `FILE: ${path.basename(error.fileName)}`,
-                `ITEM: ${error.itemIndex >= 0 ? error.itemIndex : 'N/A'}`,
-                `SPOT_NAME: ${error.spot_name}`,
-                `ERROR_TYPE: ${error.errorType}`,
-                `MESSAGE: ${error.message}`
-            ].join(' | ');
-        }).join('\n');
+        // Separar erros de MISSING_REQUIRED_SECONDARY_FILTERS
+        const missingFiltersErrors = this.errors.filter(error => error.errorType === 'MISSING_REQUIRED_SECONDARY_FILTERS');
+        const otherErrors = this.errors.filter(error => error.errorType !== 'MISSING_REQUIRED_SECONDARY_FILTERS');
+
+        let logContent = '';
+
+        // Cabeçalho do log
+        logContent += '╔══════════════════════════════════════════════════════════════════════════════════════════════╗\n';
+        logContent += '║                                    LOG DE VALIDAÇÃO DE PAYLOADS                             ║\n';
+        logContent += '╚══════════════════════════════════════════════════════════════════════════════════════════════╝\n\n';
+        logContent += `📅 Data/Hora: ${new Date().toISOString()}\n`;
+        logContent += `🔍 Total de erros: ${this.errors.length}\n`;
+        logContent += `📁 Arquivos com erros: ${Object.keys(errorsByFile).length}\n\n`;
+
+        // Log dos arquivos com erros
+        Object.entries(errorsByFile).forEach(([fileName, fileErrors]) => {
+            logContent += '═'.repeat(100) + '\n';
+            logContent += `📄 ARQUIVO: ${fileName}\n`;
+            logContent += '═'.repeat(100) + '\n';
+            logContent += `📊 Total de erros neste arquivo: ${fileErrors.length}\n\n`;
+
+            // Agrupar erros de MISSING_REQUIRED_SECONDARY_FILTERS por spot_name para este arquivo
+            const missingFiltersInFile = fileErrors.filter(error => error.errorType === 'MISSING_REQUIRED_SECONDARY_FILTERS');
+            const otherErrorsInFile = fileErrors.filter(error => error.errorType !== 'MISSING_REQUIRED_SECONDARY_FILTERS');
+
+            if (missingFiltersInFile.length > 0) {
+                logContent += '🎯 MISSING_REQUIRED_SECONDARY_FILTERS - Classificação por spot_name:\n';
+                logContent += '─'.repeat(80) + '\n';
+                
+                const errorsBySpotName = missingFiltersInFile.reduce((acc, error) => {
+                    if (!acc[error.spot_name]) {
+                        acc[error.spot_name] = [];
+                    }
+                    acc[error.spot_name].push(error);
+                    return acc;
+                }, {} as Record<string, ValidationError[]>);
+
+                // Verificar quais spot_names têm itens com filtros corretos
+                const spotsWithCorrectFilters = new Set(
+                    this.itemsWithRequiredFilters.map(item => item.spot_name)
+                );
+
+                Object.entries(errorsBySpotName).forEach(([spotName, errors]) => {
+                    if (spotsWithCorrectFilters.has(spotName)) {
+                        logContent += `📊 spot_name: "${spotName}" - Filtro default configurado\n`;
+                        logContent += `   💬 Spot possui pelo menos um item com filtros defaults corretos\n`;
+                    } else {
+                        logContent += `📊 spot_name: "${spotName}" - Total: ${errors.length} itens\n`;
+                        logContent += `   💬 Não foi encontrado nenhum spot com o filtro default definido\n`;
+                        errors.forEach(error => {
+                            logContent += `   📍 Item ${error.itemIndex} - ${error.timestamp.toISOString()}\n`;
+                            logContent += `   📝 Detalhes: ${error.message}\n`;
+                        });
+                    }
+                    logContent += '\n';
+                });
+            }
+
+            // Log dos outros erros
+            if (otherErrorsInFile.length > 0) {
+                if (missingFiltersInFile.length > 0) {
+                    logContent += '\n📋 OUTROS ERROS:\n';
+                    logContent += '─'.repeat(80) + '\n';
+                }
+
+                otherErrorsInFile.forEach((error, index) => {
+                    logContent += '─'.repeat(100) + '\n';
+                    logContent += `🔴 ERRO #${index + 1}\n`;
+                    logContent += '─'.repeat(100) + '\n';
+                    logContent += `📁 Arquivo............: ${fileName}\n`;
+                    logContent += `📍 Item...............: ${error.itemIndex >= 0 ? error.itemIndex : 'N/A'}\n`;
+                    logContent += `🏷️  Spot Name.........: ${error.spot_name}\n`;
+                    logContent += `⚠️  Tipo de Erro......: ${error.errorType}\n`;
+                    logContent += `⏰ Timestamp..........: ${error.timestamp.toISOString()}\n\n`;
+                    logContent += `💬 Mensagem:\n`;
+                    logContent += `   ${error.message}\n\n`;
+                });
+            }
+        });
 
         // Resumo final para o log
-        const logSummary = `
+        logContent += '\n' + '═'.repeat(100) + '\n';
+        logContent += '📊 RESUMO FINAL DA VALIDAÇÃO\n';
+        logContent += '═'.repeat(100) + '\n';
+        logContent += `📅 Data/Hora: ${new Date().toISOString()}\n`;
+        logContent += `🔍 Total de erros encontrados: ${this.errors.length}\n`;
+        logContent += `📁 Arquivos com erros: ${Object.keys(errorsByFile).length}\n\n`;
+        
+        logContent += '📋 Detalhes por arquivo:\n';
+        Object.entries(errorsByFile).forEach(([fileName, fileErrors]) => {
+            logContent += `   - ${fileName}: ${fileErrors.length} erros\n`;
+        });
+        
+        logContent += '\n📋 Tipos de erros:\n';
+        this.getErrorSummary().forEach(([type, count]) => {
+            logContent += `   - ${type}: ${count} ocorrências\n`;
+        });
 
-${'-'.repeat(100)}
-# RESUMO FINAL DA VALIDAÇÃO
-${'-'.repeat(100)}
-# Data/Hora: ${new Date().toISOString()}
-# Total de erros encontrados: ${this.errors.length}
-# Arquivos com erros: ${Object.keys(errorsByFile).length}
-#
-# Detalhes por arquivo:
-${Object.entries(errorsByFile).map(([fileName, fileErrors]) => 
-    `#   - ${fileName}: ${fileErrors.length} erros`
-).join('\n')}
-#
-# Tipos de erros:
-${this.getErrorSummary().map(([type, count]) => 
-    `#   - ${type}: ${count} ocorrências`
-).join('\n')}
-${'-'.repeat(100)}
-`;
+        // Estatísticas de MISSING_REQUIRED_SECONDARY_FILTERS por spot_name
+        if (missingFiltersErrors.length > 0) {
+            logContent += '\n🎯 MISSING_REQUIRED_SECONDARY_FILTERS por spot_name:\n';
+            const errorsBySpotName = missingFiltersErrors.reduce((acc, error) => {
+                if (!acc[error.spot_name]) {
+                    acc[error.spot_name] = [];
+                }
+                acc[error.spot_name].push(error);
+                return acc;
+            }, {} as Record<string, ValidationError[]>);
 
-        const logHeader = `# LOG DE VALIDAÇÃO DE PAYLOADS
-# Gerado em: ${new Date().toISOString()}
-# Total de erros: ${this.errors.length}
-#
-# Formato: [TIMESTAMP] | FILE | ITEM | SPOT_NAME | ERROR_TYPE | MESSAGE
-#
-${'-'.repeat(100)}
-`;
+            // Verificar quais spot_names têm itens com filtros corretos
+            const spotsWithCorrectFilters = new Set(
+                this.itemsWithRequiredFilters.map(item => item.spot_name)
+            );
 
-        fs.writeFileSync(logFileName, logHeader + logContent + logSummary);
+            Object.entries(errorsBySpotName).forEach(([spotName, errors]) => {
+                if (spotsWithCorrectFilters.has(spotName)) {
+                    logContent += `   - "${spotName}": Filtro default configurado\n`;
+                } else {
+                    logContent += `   - "${spotName}": ${errors.length} itens sem filtros defaults\n`;
+                }
+            });
+        }
+
+        logContent += '═'.repeat(100) + '\n';
+
+        fs.writeFileSync(logFileName, logContent);
         console.log(`\n📄 Log de erros salvo em: ${logFileName}`);
     }
 
