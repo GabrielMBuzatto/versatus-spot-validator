@@ -44,7 +44,7 @@ const VALID_SPOT_TYPES = [
     "card"
 ];
 
-// Filtros secundários específicos obrigatórios
+// Filtros secundários defaults
 const REQUIRED_SECONDARY_FILTERS = [
     { "name": "Sub-mercados", "value": "SE/CO" },
     { "name": "Sub-mercados", "value": "N" },
